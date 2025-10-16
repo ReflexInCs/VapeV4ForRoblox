@@ -330,6 +330,14 @@ run(function()
 end)
 entitylib.start()
 
+-- Create Player Category
+if not vape.Categories.Player then
+	vape.Categories.Player = vape:CreateCategory({
+		Name = 'Player',
+		Icon = 'rbxassetid://7733993369'
+	})
+end
+
 -- WalkSpeed Module
 run(function()
 	local WalkSpeed
