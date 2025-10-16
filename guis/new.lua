@@ -5768,7 +5768,7 @@ mainapi:CreateCategory({
 	Size = UDim2.fromOffset(13, 14)
 })
 mainapi:CreateCategory({
-	Name = 'Blatant',
+	Name = 'Player',
 	Icon = getcustomasset('newvape/assets/new/blatanticon.png'),
 	Size = UDim2.fromOffset(14, 14)
 })
@@ -6080,7 +6080,7 @@ guipane:CreateButton({
 		local priority = {
 			GUICategory = 1,
 			CombatCategory = 2,
-			BlatantCategory = 3,
+			PlayerCategory = 3,
 			RenderCategory = 4,
 			UtilityCategory = 5,
 			WorldCategory = 6,
