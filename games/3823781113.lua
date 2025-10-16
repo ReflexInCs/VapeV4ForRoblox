@@ -332,10 +332,14 @@ entitylib.start()
 
 -- Create Player Category
 if not vape.Categories.Player then
-	vape.Categories.Player = vape:CreateCategory({
+	vape.Categories.Player = {
 		Name = 'Player',
-		Icon = 'rbxassetid://7733993369'
-	})
+		Modules = {},
+		CreateModule = function(self, options)
+			return vape.Categories.Blatant:CreateModule(options)
+		end
+	}
+	vape.Categories.Player.CreateModule = vape.Categories.Blatant.CreateModule
 end
 
 -- WalkSpeed Module
@@ -344,7 +348,7 @@ run(function()
 	local Value
 	local oldWalkSpeed
 	
-	WalkSpeed = vape.Categories.Blatant:CreateModule({
+	WalkSpeed = vape.Categories.Player:CreateModule({
 		Name = 'WalkSpeed',
 		Function = function(callback)
 			if callback then
@@ -387,7 +391,7 @@ run(function()
 	local Value
 	local oldJumpPower
 	
-	JumpPower = vape.Categories.Blatant:CreateModule({
+	JumpPower = vape.Categories.Player:CreateModule({
 		Name = 'JumpPower',
 		Function = function(callback)
 			if callback then
