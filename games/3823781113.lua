@@ -336,7 +336,7 @@ run(function()
 	local Value
 	local oldWalkSpeed
 	
-	WalkSpeed = vape.Categories.Player:CreateModule({
+	WalkSpeed = vape.Categories.Blatant:CreateModule({
 		Name = 'WalkSpeed',
 		Function = function(callback)
 			if callback then
@@ -379,7 +379,7 @@ run(function()
 	local Value
 	local oldJumpPower
 	
-	JumpPower = vape.Categories.Player:CreateModule({
+	JumpPower = vape.Categories.Blatant:CreateModule({
 		Name = 'JumpPower',
 		Function = function(callback)
 			if callback then
