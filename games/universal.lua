@@ -860,242 +860,261 @@ run(function()
 	})
 end)
 
-task.spawn(function()
+-- Ensure AutoFarm category exists
+vape.Categories.AutoFarm = vape.Categories.AutoFarm or vape:CreateCategory("AutoFarm", {
+	Icon = "rbxassetid://3926305904",
+})
+
+run(function()
 	repeat task.wait() until vape and vape.Loaded
 
-	-- ensure category exists
-	vape.Categories.AutoFarm = vape.Categories.AutoFarm or vape:CreateCategory("AutoFarm")
-
-	-- Auto Dungeon Module
 	local AutoDungeon = vape.Categories.AutoFarm:CreateModule({
 		Name = "Auto Dungeon",
-		Tooltip = "Automatically creates and farms dungeon mobs",
 		Function = function(callback)
-			if not callback then return end
+			if callback then
+				local Players = game:GetService("Players")
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local RunService = game:GetService("RunService")
+				local LocalPlayer = Players.LocalPlayer
 
-			local Players = game:GetService("Players")
-			local ReplicatedStorage = game:GetService("ReplicatedStorage")
-			local RunService = game:GetService("RunService")
-			local LocalPlayer = Players.LocalPlayer
+				local success, DungeonInfo = pcall(function() return require(ReplicatedStorage.Modules.DungeonInfo) end)
+				local success2, DungeonGroupModule = pcall(function() return require(ReplicatedStorage.Modules.DungeonGroupModule) end)
+				local success3, ClientDataManager = pcall(function() return require(LocalPlayer.PlayerScripts.MainClient.ClientDataManager) end)
+				local success4, DateTimeManager = pcall(function() return require(LocalPlayer.PlayerScripts.MainClient.DateTimeManager) end)
+				local UIAction = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("UIAction")
 
-			local running = true
-			if AutoDungeon and AutoDungeon.Clean then
-				AutoDungeon:Clean(function() running = false end)
-			end
-
-			-- safely require modules
-			local success, DungeonInfo = pcall(function() return require(ReplicatedStorage.Modules.DungeonInfo) end)
-			local success2, DungeonGroupModule = pcall(function() return require(ReplicatedStorage.Modules.DungeonGroupModule) end)
-			local success3, ClientDataManager = pcall(function() return require(LocalPlayer.PlayerScripts.MainClient.ClientDataManager) end)
-			local success4, DateTimeManager = pcall(function() return require(LocalPlayer.PlayerScripts.MainClient.DateTimeManager) end)
-			local UIAction = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("UIAction")
-
-			if not (success and success2 and success3 and success4 and UIAction) then
-				warn("[Auto Dungeon] Missing dependencies.")
-				return
-			end
-
-			local DUNGEON = next(DungeonInfo.Dungeons)
-			local DIFFICULTY = 4
-			local floatBot, floatBoss = 9, 17
-			local lastFire = 0
-			local currentTarget
-
-			local function getCharacterParts()
-				local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-				return char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid"), char:FindFirstChildOfClass("Animator")
-			end
-
-			local function safeEnlargeHitbox(part)
-				if part and part:IsA("BasePart") and not part:GetAttribute("AutoFarmScaled") then
-					part.Size *= 3
-					part:SetAttribute("AutoFarmScaled", true)
+				if not (success and success2 and success3 and success4 and UIAction) then
+					warn("[Auto Dungeon] Missing dependencies.")
+					return
 				end
-			end
 
-			local function getActiveDungeon()
-				local storage = workspace:FindFirstChild("DungeonStorage")
-				if not storage then return end
-				for _, folder in ipairs(storage:GetChildren()) do
-					if folder:IsA("Folder") and folder:FindFirstChild("Important") then
-						return folder
+				local DUNGEON = next(DungeonInfo.Dungeons)
+				local DIFFICULTY = 4
+				local floatBot, floatBoss = 9, 17
+				local lastFire = 0
+				local currentTarget
+				local running = true
+
+				if AutoDungeon and AutoDungeon.Clean then
+					AutoDungeon:Clean(function() running = false end)
+				end
+
+				local function getCharacterParts()
+					local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+					return char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid"), char:FindFirstChildOfClass("Animator")
+				end
+
+				local function safeEnlargeHitbox(part)
+					if part and part:IsA("BasePart") and not part:GetAttribute("AutoFarmScaled") then
+						part.Size *= 3
+						part:SetAttribute("AutoFarmScaled", true)
 					end
 				end
-			end
 
-			local function isBoss(botPart)
-				return botPart and botPart.Parent and botPart.Parent.Name:lower():find("boss") ~= nil
-			end
-
-			local function getNextAliveBot()
-				local dungeon = getActiveDungeon()
-				if not dungeon then return end
-				local important = dungeon:FindFirstChild("Important")
-				if not important then return end
-				for _, spawner in ipairs(important:GetChildren()) do
-					if spawner:IsA("Part") or spawner:IsA("Model") then
-						for _, botModel in ipairs(spawner:GetChildren()) do
-							if botModel:IsA("Model") then
-								local hrp = botModel:FindFirstChild("HumanoidRootPart")
-								if hrp then
-									safeEnlargeHitbox(hrp)
-									return hrp
-								end
-							end
+				local function getActiveDungeon()
+					local storage = workspace:FindFirstChild("DungeonStorage")
+					if not storage then return end
+					for _, folder in ipairs(storage:GetChildren()) do
+						if folder:IsA("Folder") and folder:FindFirstChild("Important") then
+							return folder
 						end
 					end
 				end
-			end
 
-			-- Auto dungeon creation
-			task.spawn(function()
-				while running do
-					task.wait(5)
-					if not DUNGEON then continue end
-					local cooldown = math.max(0, ClientDataManager.Data.DungeonCooldownEndDT - DateTimeManager:Now())
-					if cooldown > 0 then continue end
-					local group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
-					if not group then
-						pcall(function()
-							UIAction:FireServer("DungeonGroupAction", "Create", "Public", DUNGEON, DIFFICULTY)
-						end)
-						task.wait(1)
-						group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
-					end
-					if group and DungeonGroupModule.CheckIsOwner(LocalPlayer, group) then
-						pcall(function()
-							UIAction:FireServer("DungeonGroupAction", "SwitchDungeonType", DUNGEON, DIFFICULTY)
-							task.wait(1)
-							UIAction:FireServer("DungeonGroupAction", "Start")
-						end)
-					end
+				local function isBoss(botPart)
+					return botPart and botPart.Parent and botPart.Parent.Name:lower():find("boss") ~= nil
 				end
-			end)
 
-			-- Auto prompts
-			task.spawn(function()
-				local PROMPT_NAMES = {"Rainbow", "Shiny", "Void", "Gold"}
-				while running do
-					task.wait(1)
+				local function getNextAliveBot()
 					local dungeon = getActiveDungeon()
-					if not dungeon then continue end
-					for _, name in ipairs(PROMPT_NAMES) do
-						local promptParent = dungeon:FindFirstChild(name)
-						if promptParent then
-							local prompt = promptParent:FindFirstChild("ProximityPrompt")
-							if prompt then
-								pcall(fireproximityprompt, prompt)
-							end
-						end
-					end
-				end
-			end)
-
-			-- Teleport when no mobs
-			task.spawn(function()
-				local PROMPT_NAMES = {"Rainbow", "Shiny", "Void", "Gold"}
-				while running do
-					task.wait(1)
-					local dungeon = getActiveDungeon()
-					if dungeon and not getNextAliveBot() then
-						local hrp = getCharacterParts()
-						if hrp then
-							for _, name in ipairs(PROMPT_NAMES) do
-								local p = dungeon:FindFirstChild(name)
-								if p then
-									pcall(function()
-										hrp.CFrame = p:GetPivot() + Vector3.new(0, 5, 0)
-									end)
-									break
-								end
-							end
-						end
-					end
-				end
-			end)
-
-			-- Farming logic
-			if AutoDungeon and AutoDungeon.Clean then
-				AutoDungeon:Clean(RunService.Heartbeat:Connect(function(dt)
-					if not running then return end
-					local hrp, hum, animator = getCharacterParts()
-					if not hrp or not hum then return end
-					if animator then
-						for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-							track:Stop(0)
-						end
-					end
-					if not currentTarget or not currentTarget.Parent then
-						currentTarget = getNextAliveBot()
-					end
-					if not currentTarget then return end
-					pcall(function()
-						local height = isBoss(currentTarget) and floatBoss or floatBot
-						local abovePos = currentTarget.Position + Vector3.new(0, height, 0)
-						hrp.AssemblyLinearVelocity = Vector3.zero
-						hrp.Velocity = Vector3.zero
-						hrp.CFrame = CFrame.new(abovePos) * CFrame.Angles(-math.pi/2, 0, 0)
-					end)
-					lastFire += dt
-					if lastFire >= 0.1 then
-						lastFire = 0
-						pcall(function()
-							local char = LocalPlayer.Character
-							if char then
-								for _, tool in ipairs(char:GetChildren()) do
-									if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
-										tool.RemoteClick:FireServer({})
+					if not dungeon then return end
+					local important = dungeon:FindFirstChild("Important")
+					if not important then return end
+					for _, spawner in ipairs(important:GetChildren()) do
+						if spawner:IsA("Part") or spawner:IsA("Model") then
+							for _, botModel in ipairs(spawner:GetChildren()) do
+								if botModel:IsA("Model") then
+									local hrp = botModel:FindFirstChild("HumanoidRootPart")
+									if hrp then
+										safeEnlargeHitbox(hrp)
+										return hrp
 									end
 								end
-								local events = ReplicatedStorage:FindFirstChild("Events")
-								if events and events:FindFirstChild("SwingSaber") then
-									events.SwingSaber:FireServer()
-								end
 							end
-						end)
+						end
 					end
-				end))
-			end
-		end
-	})
+				end
 
-	-- Auto Swing Module
-	local AutoSwing = vape.Categories.AutoFarm:CreateModule({
-		Name = "Auto Swing",
-		Tooltip = "Automatically swings all equipped weapons",
-		Function = function(callback)
-			if not callback then return end
-
-			local RunService = game:GetService("RunService")
-			local ReplicatedStorage = game:GetService("ReplicatedStorage")
-			local Players = game:GetService("Players")
-			local LocalPlayer = Players.LocalPlayer
-
-			local running = true
-			if AutoSwing and AutoSwing.Clean then
-				AutoSwing:Clean(function() running = false end)
-			end
-
-			if AutoSwing and AutoSwing.Clean then
-				AutoSwing:Clean(RunService.Heartbeat:Connect(function()
-					if not running then return end
-					local char = LocalPlayer.Character
-					if not char then return end
-					for _, tool in ipairs(char:GetChildren()) do
-						if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+				-- Auto Create Dungeon
+				task.spawn(function()
+					while running do
+						task.wait(5)
+						if not DUNGEON then continue end
+						local cooldown = math.max(0, ClientDataManager.Data.DungeonCooldownEndDT - DateTimeManager:Now())
+						if cooldown > 0 then continue end
+						local group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
+						if not group then
 							pcall(function()
-								tool.RemoteClick:FireServer({})
+								UIAction:FireServer("DungeonGroupAction", "Create", "Public", DUNGEON, DIFFICULTY)
+							end)
+							task.wait(1)
+							group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
+						end
+						if group and DungeonGroupModule.CheckIsOwner(LocalPlayer, group) then
+							pcall(function()
+								UIAction:FireServer("DungeonGroupAction", "SwitchDungeonType", DUNGEON, DIFFICULTY)
+								task.wait(1)
+								UIAction:FireServer("DungeonGroupAction", "Start")
 							end)
 						end
 					end
-					local events = ReplicatedStorage:FindFirstChild("Events")
-					if events and events:FindFirstChild("SwingSaber") then
-						pcall(function()
-							events.SwingSaber:FireServer()
-						end)
+				end)
+
+				-- Auto Prompts
+				task.spawn(function()
+					local PROMPT_NAMES = {"Rainbow", "Shiny", "Void", "Gold"}
+					while running do
+						task.wait(1)
+						local dungeon = getActiveDungeon()
+						if not dungeon then continue end
+						for _, name in ipairs(PROMPT_NAMES) do
+							local promptParent = dungeon:FindFirstChild(name)
+							if promptParent then
+								local prompt = promptParent:FindFirstChild("ProximityPrompt")
+								if prompt then
+									pcall(fireproximityprompt, prompt)
+								end
+							end
+						end
 					end
-				end))
+				end)
+
+				-- Teleport to prompts when no mobs
+				task.spawn(function()
+					local PROMPT_NAMES = {"Rainbow", "Shiny", "Void", "Gold"}
+					while running do
+						task.wait(1)
+						local dungeon = getActiveDungeon()
+						if dungeon and not getNextAliveBot() then
+							local hrp = getCharacterParts()
+							if hrp then
+								for _, name in ipairs(PROMPT_NAMES) do
+									local p = dungeon:FindFirstChild(name)
+									if p then
+										pcall(function()
+											hrp.CFrame = p:GetPivot() + Vector3.new(0, 5, 0)
+										end)
+										break
+									end
+								end
+							end
+						end
+					end
+				end)
+
+				-- Main farm loop
+				if AutoDungeon and AutoDungeon.Clean then
+					AutoDungeon:Clean(RunService.Heartbeat:Connect(function(dt)
+						if not running then return end
+						local hrp, hum, animator = getCharacterParts()
+						if not hrp or not hum or not hrp.Parent then return end
+						if animator and animator.Parent and animator:GetFullName() ~= nil then
+							for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+								pcall(function() track:Stop(0) end)
+							end
+						end
+						if not currentTarget or not currentTarget.Parent then
+							currentTarget = getNextAliveBot()
+						end
+						if not currentTarget then return end
+						local targetPos = currentTarget.Position
+						local height = isBoss(currentTarget) and floatBoss or floatBot
+						local abovePos = targetPos + Vector3.new(0, height, 0)
+						pcall(function()
+							hrp.AssemblyLinearVelocity = Vector3.zero
+							hrp.Velocity = Vector3.zero
+							hrp.CFrame = CFrame.new(abovePos) * CFrame.Angles(-math.pi/2, 0, 0)
+						end)
+						lastFire += dt
+						if lastFire >= 0.1 then
+							lastFire = 0
+							pcall(function()
+								local char = LocalPlayer.Character
+								if char then
+									for _, tool in ipairs(char:GetChildren()) do
+										if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+											tool.RemoteClick:FireServer({})
+										elseif tool:IsA("Tool") and tool:FindFirstChild("RemoteEvent") then
+											tool.RemoteEvent:FireServer()
+										else
+											tool:Activate()
+										end
+									end
+									local events = ReplicatedStorage:FindFirstChild("Events")
+									if events and events:FindFirstChild("SwingSaber") then
+										events.SwingSaber:FireServer()
+									end
+								end
+							end)
+						end
+					end))
+				end
 			end
-		end
+		end,
+		Tooltip = "Automatically creates and farms dungeon mobs"
+	})
+end)
+
+run(function()
+	repeat task.wait() until vape and vape.Loaded
+
+	local AutoSwing = vape.Categories.AutoFarm:CreateModule({
+		Name = "Auto Swing",
+		Function = function(callback)
+			if callback then
+				local RunService = game:GetService("RunService")
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local Players = game:GetService("Players")
+				local LocalPlayer = Players.LocalPlayer
+				local running = true
+
+				if AutoSwing and AutoSwing.Clean then
+					AutoSwing:Clean(function() running = false end)
+				end
+
+				if AutoSwing and AutoSwing.Clean then
+					AutoSwing:Clean(RunService.Heartbeat:Connect(function()
+						if not running then return end
+						local char = LocalPlayer.Character
+						if not char then return end
+
+						for _, tool in ipairs(char:GetChildren()) do
+							if tool:IsA("Tool") then
+								pcall(function()
+									if tool:FindFirstChild("RemoteClick") then
+										tool.RemoteClick:FireServer({})
+									elseif tool:FindFirstChild("RemoteEvent") then
+										tool.RemoteEvent:FireServer()
+									else
+										tool:Activate()
+									end
+								end)
+							end
+						end
+
+						local events = ReplicatedStorage:FindFirstChild("Events")
+						if events then
+							if events:FindFirstChild("SwingSaber") then
+								pcall(function() events.SwingSaber:FireServer() end)
+							end
+							if events:FindFirstChild("Click") then
+								pcall(function() events.Click:FireServer() end)
+							end
+						end
+					end))
+				end
+			end
+		end,
+		Tooltip = "Automatically swings all equipped tools / sabers"
 	})
 end)
