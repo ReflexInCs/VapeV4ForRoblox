@@ -867,7 +867,7 @@ run(function()
 	local dungeonLoop
 	local isRunning = false
 	
-	AutoJoinDungeon = vape.Categories.AutoFarm:CreateModule({
+	AutoJoinDungeon = vape.Categories.Dungeon:CreateModule({
 		Name = 'AutoJoinDungeon',
 		Function = function(callback)
 			if callback then
@@ -977,7 +977,7 @@ run(function()
 	local isRunning = false
 	local currentTarget
 	
-	AutoFarmDungeon = vape.Categories.AutoFarm:CreateModule({
+	AutoFarmDungeon = vape.Categories.Dungeon:CreateModule({
 		Name = 'AutoFarmDungeon',
 		Function = function(callback)
 			if callback then
@@ -1194,7 +1194,7 @@ run(function()
 	local isRunning = false
 	local currentTarget
 	
-	FullyAutoDungeon = vape.Categories.AutoFarm:CreateModule({
+	FullyAutoDungeon = vape.Categories.Dungeon:CreateModule({
 		Name = 'FullyAutoDungeon',
 		Function = function(callback)
 			if callback then
