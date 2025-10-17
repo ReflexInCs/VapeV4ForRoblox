@@ -1182,7 +1182,7 @@ run(function()
 	})
 end)
 
--- Fully Auto Dungeon (Combined: Join + Farm)
+-- Fully Auto Dungeon (Combined: Join + Farm) - FIXED
 run(function()
 	local FullyAutoDungeon
 	local DifficultySlider
@@ -1205,6 +1205,7 @@ run(function()
 				local RunService = game:GetService("RunService")
 				local LocalPlayer = Players.LocalPlayer
 				local PROMPT_NAMES = {"Rainbow", "Shiny", "Void", "Gold"}
+				local lastFireTime = 0
 				
 				-- Helper functions
 				local function getCharacterParts()
@@ -1310,115 +1311,108 @@ run(function()
 					end)
 				end
 				
-				-- Function to handle dungeon farming
-				local function handleDungeon()
-					local lastFireTime = 0
+				-- Function to handle dungeon farming - HEARTBEAT MUST BE OUTSIDE
+				FullyAutoDungeon:Clean(RunService.Heartbeat:Connect(function(deltaTime)
+					if not isRunning or not FullyAutoDungeon.Enabled then return end
 					
-					-- Heartbeat farming
-					FullyAutoDungeon:Clean(RunService.Heartbeat:Connect(function(deltaTime)
-						if not isRunning or not FullyAutoDungeon.Enabled then return end
-						
-						local hrp, humanoid, animator = getCharacterParts()
-						if not hrp or not humanoid then return end
-						
-						if animator then
-							pcall(function()
-								for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-									track:Stop(0)
-								end
-							end)
-						end
-						
-						-- Refresh target
-						if not currentTarget or not currentTarget.Parent then
-							currentTarget = getNextAliveBot()
-						end
-						
-						if currentTarget then
-							pcall(function()
-								local targetPos = currentTarget.Position
-								local height = isBoss(currentTarget) and FloatHeightBoss.Value or FloatHeightBot.Value
-								local abovePos = targetPos + Vector3.new(0, height, 0)
-								hrp.AssemblyLinearVelocity = Vector3.zero
-								hrp.Velocity = Vector3.zero
-								-- Look straight down at target
-								hrp.CFrame = CFrame.new(abovePos) * CFrame.Angles(-math.pi/2, 0, 0)
-							end)
-						end
-						
-						lastFireTime = lastFireTime + deltaTime
-						if lastFireTime >= 0.1 then
-							lastFireTime = 0
-							pcall(function()
-								local char = LocalPlayer.Character
-								if char then
-									for _, tool in ipairs(char:GetChildren()) do
-										if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
-											tool.RemoteClick:FireServer({})
-										end
+					local hrp, humanoid, animator = getCharacterParts()
+					if not hrp or not humanoid then return end
+					
+					if animator then
+						pcall(function()
+							for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+								track:Stop(0)
+							end
+						end)
+					end
+					
+					-- Refresh target
+					if not currentTarget or not currentTarget.Parent then
+						currentTarget = getNextAliveBot()
+					end
+					
+					if currentTarget then
+						pcall(function()
+							local targetPos = currentTarget.Position
+							local height = isBoss(currentTarget) and FloatHeightBoss.Value or FloatHeightBot.Value
+							local abovePos = targetPos + Vector3.new(0, height, 0)
+							hrp.AssemblyLinearVelocity = Vector3.zero
+							hrp.Velocity = Vector3.zero
+							-- Look straight down at target
+							hrp.CFrame = CFrame.new(abovePos) * CFrame.Angles(-math.pi/2, 0, 0)
+						end)
+					end
+					
+					lastFireTime = lastFireTime + deltaTime
+					if lastFireTime >= 0.1 then
+						lastFireTime = 0
+						pcall(function()
+							local char = LocalPlayer.Character
+							if char then
+								for _, tool in ipairs(char:GetChildren()) do
+									if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+										tool.RemoteClick:FireServer({})
 									end
 								end
-								local ReplicatedStorage = game:GetService("ReplicatedStorage")
-								if ReplicatedStorage:FindFirstChild("Events") and 
-								   ReplicatedStorage.Events:FindFirstChild("SwingSaber") then
-									ReplicatedStorage.Events.SwingSaber:FireServer()
+							end
+							local ReplicatedStorage = game:GetService("ReplicatedStorage")
+							if ReplicatedStorage:FindFirstChild("Events") and 
+							   ReplicatedStorage.Events:FindFirstChild("SwingSaber") then
+								ReplicatedStorage.Events.SwingSaber:FireServer()
+							end
+						end)
+					end
+				end))
+				
+				-- Auto-collect items
+				promptLoop = task.spawn(function()
+					while isRunning and FullyAutoDungeon.Enabled do
+						task.wait(1)
+						local dungeon = getActiveDungeon()
+						if dungeon then
+							for _, promptName in ipairs(PROMPT_NAMES) do
+								local promptParent = dungeon:FindFirstChild(promptName)
+								if promptParent then
+									local proximityPrompt = promptParent:FindFirstChild("ProximityPrompt")
+									if proximityPrompt and proximityPrompt:IsA("ProximityPrompt") then
+										pcall(function()
+											fireproximityprompt(proximityPrompt)
+										end)
+									end
 								end
-							end)
+							end
 						end
-					end))
-					
-					-- Auto-collect items
-					promptLoop = task.spawn(function()
-						while isRunning and FullyAutoDungeon.Enabled do
-							task.wait(1)
-							local dungeon = getActiveDungeon()
-							if dungeon then
-								for _, promptName in ipairs(PROMPT_NAMES) do
-									local promptParent = dungeon:FindFirstChild(promptName)
-									if promptParent then
-										local proximityPrompt = promptParent:FindFirstChild("ProximityPrompt")
-										if proximityPrompt and proximityPrompt:IsA("ProximityPrompt") then
+					end
+				end)
+				
+				-- Auto teleport to prompts when no mobs
+				teleportLoop = task.spawn(function()
+					while isRunning and FullyAutoDungeon.Enabled do
+						task.wait(10)
+						local dungeon = getActiveDungeon()
+						if dungeon then
+							local aliveBot = getNextAliveBot()
+							if not aliveBot then
+								local hrp = getCharacterParts()
+								if hrp then
+									for _, promptName in ipairs(PROMPT_NAMES) do
+										local promptParent = dungeon:FindFirstChild(promptName)
+										if promptParent then
 											pcall(function()
-												fireproximityprompt(proximityPrompt)
+												hrp.CFrame = promptParent:GetPivot() + Vector3.new(0, 5, 0)
 											end)
+											break
 										end
 									end
 								end
 							end
 						end
-					end)
-					
-					-- Auto teleport to prompts when no mobs
-					teleportLoop = task.spawn(function()
-						while isRunning and FullyAutoDungeon.Enabled do
-							task.wait(1)
-							local dungeon = getActiveDungeon()
-							if dungeon then
-								local aliveBot = getNextAliveBot()
-								if not aliveBot then
-									local hrp = getCharacterParts()
-									if hrp then
-										for _, promptName in ipairs(PROMPT_NAMES) do
-											local promptParent = dungeon:FindFirstChild(promptName)
-											if promptParent then
-												pcall(function()
-													hrp.CFrame = promptParent:GetPivot() + Vector3.new(0, 5, 0)
-												end)
-												break
-											end
-										end
-									end
-								end
-							end
-						end
-					end)
-				end
+					end
+				end)
 				
 				-- Initial check and setup
 				if game.PlaceId == 3823781113 then
 					handleLobby()
-				else
-					handleDungeon()
 				end
 				
 			else
@@ -1465,5 +1459,205 @@ run(function()
 		Default = true,
 		Function = function(callback) end,
 		Tooltip = 'Auto start dungeons in lobby'
+	})
+end)
+
+-- Auto Swing Module
+run(function()
+	local AutoSwing
+	local swingLoop
+	local isRunning = false
+	
+	AutoSwing = vape.Categories.AutoFarm:CreateModule({
+		Name = 'AutoSwing',
+		Function = function(callback)
+			if callback then
+				isRunning = true
+				
+				swingLoop = task.spawn(function()
+					local Players = game:GetService("Players")
+					local LocalPlayer = Players.LocalPlayer
+					
+					while isRunning and AutoSwing.Enabled do
+						task.wait(0.1)
+						pcall(function()
+							local char = LocalPlayer.Character
+							if char then
+								for _, tool in ipairs(char:GetChildren()) do
+									if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+										tool.RemoteClick:FireServer({})
+									end
+								end
+							end
+							local ReplicatedStorage = game:GetService("ReplicatedStorage")
+							if ReplicatedStorage:FindFirstChild("Events") and 
+							   ReplicatedStorage.Events:FindFirstChild("SwingSaber") then
+								ReplicatedStorage.Events.SwingSaber:FireServer()
+							end
+						end)
+					end
+				end)
+				
+				notif('Auto Swing', 'Started swinging!', 2)
+			else
+				isRunning = false
+				if swingLoop then
+					task.cancel(swingLoop)
+					swingLoop = nil
+				end
+				notif('Auto Swing', 'Stopped', 2)
+			end
+		end,
+		Tooltip = 'Automatically swings your weapon/saber'
+	})
+end)
+
+-- Auto Sell Module
+run(function()
+	local AutoSell
+	local SellDelay
+	local sellLoop
+	local isRunning = false
+	
+	AutoSell = vape.Categories.AutoFarm:CreateModule({
+		Name = 'AutoSell',
+		Function = function(callback)
+			if callback then
+				isRunning = true
+				
+				sellLoop = task.spawn(function()
+					local ReplicatedStorage = game:GetService("ReplicatedStorage")
+					
+					while isRunning and AutoSell.Enabled do
+						task.wait(SellDelay.Value)
+						pcall(function()
+							if ReplicatedStorage:FindFirstChild("Events") and 
+							   ReplicatedStorage.Events:FindFirstChild("SellStrength") then
+								ReplicatedStorage.Events.SellStrength:FireServer()
+							end
+						end)
+					end
+				end)
+				
+				notif('Auto Sell', 'Started selling strength!', 2)
+			else
+				isRunning = false
+				if sellLoop then
+					task.cancel(sellLoop)
+					sellLoop = nil
+				end
+				notif('Auto Sell', 'Stopped', 2)
+			end
+		end,
+		Tooltip = 'Automatically sells your strength'
+	})
+	
+	SellDelay = AutoSell:CreateSlider({
+		Name = 'Sell Delay',
+		Min = 1,
+		Max = 60,
+		Default = 5,
+		Function = function(val) end,
+		Tooltip = 'Delay between sells (seconds)'
+	})
+end)
+
+-- Auto Buy Saber Module
+run(function()
+	local AutoBuySaber
+	local BuyDelay
+	local buyLoop
+	local isRunning = false
+	
+	AutoBuySaber = vape.Categories.AutoFarm:CreateModule({
+		Name = 'AutoBuySaber',
+		Function = function(callback)
+			if callback then
+				isRunning = true
+				
+				buyLoop = task.spawn(function()
+					local ReplicatedStorage = game:GetService("ReplicatedStorage")
+					
+					while isRunning and AutoBuySaber.Enabled do
+						task.wait(BuyDelay.Value)
+						pcall(function()
+							if ReplicatedStorage:FindFirstChild("Events") and 
+							   ReplicatedStorage.Events:FindFirstChild("UIAction") then
+								ReplicatedStorage.Events.UIAction:FireServer("BuyAllWeapons")
+							end
+						end)
+					end
+				end)
+				
+				notif('Auto Buy Saber', 'Started buying weapons!', 2)
+			else
+				isRunning = false
+				if buyLoop then
+					task.cancel(buyLoop)
+					buyLoop = nil
+				end
+				notif('Auto Buy Saber', 'Stopped', 2)
+			end
+		end,
+		Tooltip = 'Automatically buys all weapons/sabers'
+	})
+	
+	BuyDelay = AutoBuySaber:CreateSlider({
+		Name = 'Buy Delay',
+		Min = 1,
+		Max = 60,
+		Default = 10,
+		Function = function(val) end,
+		Tooltip = 'Delay between purchases (seconds)'
+	})
+end)
+
+-- Auto Buy DNA Module
+run(function()
+	local AutoBuyDNA
+	local BuyDelay
+	local buyLoop
+	local isRunning = false
+	
+	AutoBuyDNA = vape.Categories.AutoFarm:CreateModule({
+		Name = 'AutoBuyDNA',
+		Function = function(callback)
+			if callback then
+				isRunning = true
+				
+				buyLoop = task.spawn(function()
+					local ReplicatedStorage = game:GetService("ReplicatedStorage")
+					
+					while isRunning and AutoBuyDNA.Enabled do
+						task.wait(BuyDelay.Value)
+						pcall(function()
+							if ReplicatedStorage:FindFirstChild("Events") and 
+							   ReplicatedStorage.Events:FindFirstChild("UIAction") then
+								ReplicatedStorage.Events.UIAction:FireServer("BuyAllDNAs")
+							end
+						end)
+					end
+				end)
+				
+				notif('Auto Buy DNA', 'Started buying DNAs!', 2)
+			else
+				isRunning = false
+				if buyLoop then
+					task.cancel(buyLoop)
+					buyLoop = nil
+				end
+				notif('Auto Buy DNA', 'Stopped', 2)
+			end
+		end,
+		Tooltip = 'Automatically buys all DNAs'
+	})
+	
+	BuyDelay = AutoBuyDNA:CreateSlider({
+		Name = 'Buy Delay',
+		Min = 1,
+		Max = 60,
+		Default = 10,
+		Function = function(val) end,
+		Tooltip = 'Delay between purchases (seconds)'
 	})
 end)
