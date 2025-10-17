@@ -1554,9 +1554,9 @@ run(function()
 	
 	SellDelay = AutoSell:CreateSlider({
 		Name = 'Sell Delay',
-		Min = 1,
-		Max = 60,
-		Default = 5,
+		Min = 0.1,
+		Max = 2,
+		Default = 1,
 		Function = function(val) end,
 		Tooltip = 'Delay between sells (seconds)'
 	})
@@ -1604,9 +1604,9 @@ run(function()
 	
 	BuyDelay = AutoBuySaber:CreateSlider({
 		Name = 'Buy Delay',
-		Min = 1,
-		Max = 60,
-		Default = 10,
+		Min = 0.1,
+		Max = 5,
+		Default = 1,
 		Function = function(val) end,
 		Tooltip = 'Delay between purchases (seconds)'
 	})
@@ -1654,9 +1654,9 @@ run(function()
 	
 	BuyDelay = AutoBuyDNA:CreateSlider({
 		Name = 'Buy Delay',
-		Min = 1,
-		Max = 60,
-		Default = 10,
+		Min = 0.1,
+		Max = 5,
+		Default = 1,
 		Function = function(val) end,
 		Tooltip = 'Delay between purchases (seconds)'
 	})
