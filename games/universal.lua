@@ -905,9 +905,7 @@ run(function()
 							
 							-- Check cooldown
 							local cooldown = math.max(0, ClientDataManager.Data.DungeonCooldownEndDT - DateTimeManager:Now())
-							if cooldown > 0 then
-								continue
-							end
+							if cooldown > 0 then continue end
 							
 							local group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
 							
@@ -975,8 +973,9 @@ run(function()
 	local AutoFarmDungeon
 	local FloatHeightBot
 	local FloatHeightBoss
-	local farmLoop
+	local farmLoop, promptLoop, teleportLoop
 	local isRunning = false
+	local currentTarget
 	
 	AutoFarmDungeon = vape.Categories.AutoFarm:CreateModule({
 		Name = 'AutoFarmDungeon',
@@ -988,14 +987,16 @@ run(function()
 				local RunService = game:GetService("RunService")
 				local LocalPlayer = Players.LocalPlayer
 				local lastFireTime = 0
+				local PROMPT_NAMES = {"Rainbow", "Shiny", "Void", "Gold"}
 				
 				-- Helper functions
 				local function getCharacterParts()
 					local char = LocalPlayer.Character
 					if not char then return nil, nil, nil end
-					return char:FindFirstChild("HumanoidRootPart"), 
-						   char:FindFirstChild("Humanoid"), 
-						   char:FindFirstChildOfClass("Animator")
+					local hrp = char:FindFirstChild("HumanoidRootPart")
+					local hum = char:FindFirstChildOfClass("Humanoid")
+					local animator = char:FindFirstChildOfClass("Animator")
+					return hrp, hum, animator
 				end
 				
 				local function safeEnlargeHitbox(part)
@@ -1007,24 +1008,42 @@ run(function()
 					end)
 				end
 				
-				local function getBotsByColor(important, colorName)
-					local bots = {}
-					for _, child in ipairs(important:GetChildren()) do
-						local bot = child:FindFirstChild(colorName .. " Bot")
-						if bot and bot:FindFirstChild("HumanoidRootPart") then
-							table.insert(bots, bot.HumanoidRootPart)
-							safeEnlargeHitbox(bot.HumanoidRootPart)
+				local function getActiveDungeon()
+					local storage = workspace:FindFirstChild("DungeonStorage")
+					if not storage then return nil end
+					
+					for _, folder in ipairs(storage:GetChildren()) do
+						if folder:IsA("Folder") and folder:FindFirstChild("Important") then
+							return folder
 						end
 					end
-					return bots
+					return nil
 				end
 				
-				local function getBossHRP(important, spawnerName, bossName)
-					local spawner = important:FindFirstChild(spawnerName)
-					if spawner then
-						local boss = spawner:FindFirstChild(bossName)
-						if boss and boss:FindFirstChild("HumanoidRootPart") then
-							return boss.HumanoidRootPart
+				local function isBoss(botPart)
+					if not botPart or not botPart.Parent then return false end
+					local name = botPart.Parent.Name:lower()
+					return name:find("boss") ~= nil
+				end
+				
+				local function getNextAliveBot()
+					local dungeon = getActiveDungeon()
+					if not dungeon then return nil end
+					
+					local important = dungeon:FindFirstChild("Important")
+					if not important then return nil end
+					
+					for _, spawner in ipairs(important:GetChildren()) do
+						if spawner:IsA("Part") or spawner:IsA("Model") then
+							for _, botModel in ipairs(spawner:GetChildren()) do
+								if botModel:IsA("Model") then
+									local hrp = botModel:FindFirstChild("HumanoidRootPart")
+									if hrp then
+										safeEnlargeHitbox(hrp)
+										return hrp
+									end
+								end
+							end
 						end
 					end
 					return nil
@@ -1040,43 +1059,27 @@ run(function()
 					-- Stop animations
 					if animator then
 						pcall(function()
-							for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+							for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
 								track:Stop(0)
 							end
 						end)
 					end
 					
-					local dungeon = workspace:FindFirstChild("Dungeon")
-					if not dungeon then return end
-					local important = dungeon:FindFirstChild("Important")
-					if not important then return end
+					-- Refresh target
+					if not currentTarget or not currentTarget.Parent then
+						currentTarget = getNextAliveBot()
+					end
 					
-					-- Get all bots and bosses
-					local greenBots  = getBotsByColor(important, "Green")
-					local blueBots   = getBotsByColor(important, "Blue")
-					local redBots    = getBotsByColor(important, "Red")
-					local purpleBots = getBotsByColor(important, "Purple")
-					
-					local greenBossHRP  = getBossHRP(important, "GreenBossEnemySpawner", "Green Boss")
-					local blueBossHRP   = getBossHRP(important, "BlueBossEnemySpawner",  "Blue Boss")
-					local redBossHRP    = getBossHRP(important, "RedBossEnemySpawner",   "Red Boss")
-					local purpleBossHRP = getBossHRP(important, "PurpleBossEnemySpawner","Purple Boss")
-					
-					-- Priority: Bosses first, then bots
-					local targetHRP = greenBossHRP or blueBossHRP or redBossHRP or purpleBossHRP
-						or greenBots[1] or blueBots[1] or redBots[1] or purpleBots[1]
-					
-					if targetHRP then
+					if currentTarget then
 						pcall(function()
+							local targetPos = currentTarget.Position
+							local height = isBoss(currentTarget) and FloatHeightBoss.Value or FloatHeightBot.Value
+							local abovePos = targetPos + Vector3.new(0, height, 0)
 							hrp.AssemblyLinearVelocity = Vector3.zero
 							hrp.Velocity = Vector3.zero
+							-- Look straight down at target
+							hrp.CFrame = CFrame.new(abovePos) * CFrame.Angles(-math.pi/2, 0, 0)
 						end)
-						
-						local floatHeight = (greenBossHRP or blueBossHRP or redBossHRP or purpleBossHRP) 
-							and FloatHeightBoss.Value or FloatHeightBot.Value
-						local targetPos = targetHRP.Position + Vector3.new(0, floatHeight, 0)
-						local lookCFrame = CFrame.new(targetPos, targetHRP.Position)
-						pcall(function() hrp.CFrame = lookCFrame end)
 					end
 					
 					-- Fire remotes
@@ -1084,9 +1087,9 @@ run(function()
 					if lastFireTime >= 0.1 then
 						lastFireTime = 0
 						pcall(function()
-							local userFolder = workspace:FindFirstChild(LocalPlayer.Name)
-							if userFolder then
-								for _, tool in ipairs(userFolder:GetChildren()) do
+							local char = LocalPlayer.Character
+							if char then
+								for _, tool in ipairs(char:GetChildren()) do
 									if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
 										tool.RemoteClick:FireServer({})
 									end
@@ -1102,30 +1105,44 @@ run(function()
 				end))
 				
 				-- ProximityPrompt auto-collect
-				farmLoop = task.spawn(function()
+				promptLoop = task.spawn(function()
 					while isRunning and AutoFarmDungeon.Enabled do
 						task.wait(1)
-						local dungeon = workspace:FindFirstChild("Dungeon")
+						local dungeon = getActiveDungeon()
 						if dungeon then
-							for _, name in ipairs({"Shiny", "Gold", "Rainbow", "Void"}) do
-								local folder = dungeon:FindFirstChild(name)
-								if folder then
-									local prompt = folder:FindFirstChild("ProximityPrompt")
-									if prompt and prompt:IsA("ProximityPrompt") then
+							for _, promptName in ipairs(PROMPT_NAMES) do
+								local promptParent = dungeon:FindFirstChild(promptName)
+								if promptParent then
+									local proximityPrompt = promptParent:FindFirstChild("ProximityPrompt")
+									if proximityPrompt and proximityPrompt:IsA("ProximityPrompt") then
 										pcall(function()
-											prompt.MaxActivationDistance = 100000
-											prompt.HoldDuration = 0
-											prompt.RequiresLineOfSight = false
-											if fireproximityprompt then
-												fireproximityprompt(prompt)
-											elseif firesignal then
-												firesignal(prompt.Triggered, LocalPlayer)
-											else
-												prompt:InputHoldBegin()
-												task.wait(0.05)
-												prompt:InputHoldEnd()
-											end
+											fireproximityprompt(proximityPrompt)
 										end)
+									end
+								end
+							end
+						end
+					end
+				end)
+				
+				-- Auto teleport to prompts when no mobs
+				teleportLoop = task.spawn(function()
+					while isRunning and AutoFarmDungeon.Enabled do
+						task.wait(10)
+						local dungeon = getActiveDungeon()
+						if dungeon then
+							local aliveBot = getNextAliveBot()
+							if not aliveBot then
+								local hrp = getCharacterParts()
+								if hrp then
+									for _, promptName in ipairs(PROMPT_NAMES) do
+										local promptParent = dungeon:FindFirstChild(promptName)
+										if promptParent then
+											pcall(function()
+												hrp.CFrame = promptParent:GetPivot() + Vector3.new(0, 5, 0)
+											end)
+											break
+										end
 									end
 								end
 							end
@@ -1137,10 +1154,9 @@ run(function()
 			else
 				-- Disable
 				isRunning = false
-				if farmLoop then
-					task.cancel(farmLoop)
-					farmLoop = nil
-				end
+				currentTarget = nil
+				if promptLoop then task.cancel(promptLoop) end
+				if teleportLoop then task.cancel(teleportLoop) end
 				notif('Auto Farm', 'Stopped', 2)
 			end
 		end,
@@ -1174,9 +1190,9 @@ run(function()
 	local FloatHeightBoss
 	local AutoStartToggle
 	
-	local joinLoop, farmLoop
+	local joinLoop, promptLoop, teleportLoop
 	local isRunning = false
-	local lastPlaceId = game.PlaceId
+	local currentTarget
 	
 	FullyAutoDungeon = vape.Categories.AutoFarm:CreateModule({
 		Name = 'FullyAutoDungeon',
@@ -1185,15 +1201,77 @@ run(function()
 				isRunning = true
 				notif('Fully Auto', 'Started! Will auto-join and auto-farm', 3)
 				
+				local Players = game:GetService("Players")
+				local RunService = game:GetService("RunService")
+				local LocalPlayer = Players.LocalPlayer
+				local PROMPT_NAMES = {"Rainbow", "Shiny", "Void", "Gold"}
+				
+				-- Helper functions
+				local function getCharacterParts()
+					local char = LocalPlayer.Character
+					if not char then return nil, nil, nil end
+					local hrp = char:FindFirstChild("HumanoidRootPart")
+					local hum = char:FindFirstChildOfClass("Humanoid")
+					local animator = char:FindFirstChildOfClass("Animator")
+					return hrp, hum, animator
+				end
+				
+				local function safeEnlargeHitbox(part)
+					if not part or not part:IsA("BasePart") then return end
+					if part:GetAttribute("AutoFarmScaled") then return end
+					pcall(function()
+						part.Size = part.Size * 3
+						part:SetAttribute("AutoFarmScaled", true)
+					end)
+				end
+				
+				local function getActiveDungeon()
+					local storage = workspace:FindFirstChild("DungeonStorage")
+					if not storage then return nil end
+					
+					for _, folder in ipairs(storage:GetChildren()) do
+						if folder:IsA("Folder") and folder:FindFirstChild("Important") then
+							return folder
+						end
+					end
+					return nil
+				end
+				
+				local function isBoss(botPart)
+					if not botPart or not botPart.Parent then return false end
+					local name = botPart.Parent.Name:lower()
+					return name:find("boss") ~= nil
+				end
+				
+				local function getNextAliveBot()
+					local dungeon = getActiveDungeon()
+					if not dungeon then return nil end
+					
+					local important = dungeon:FindFirstChild("Important")
+					if not important then return nil end
+					
+					for _, spawner in ipairs(important:GetChildren()) do
+						if spawner:IsA("Part") or spawner:IsA("Model") then
+							for _, botModel in ipairs(spawner:GetChildren()) do
+								if botModel:IsA("Model") then
+									local hrp = botModel:FindFirstChild("HumanoidRootPart")
+									if hrp then
+										safeEnlargeHitbox(hrp)
+										return hrp
+									end
+								end
+							end
+						end
+					end
+					return nil
+				end
+				
 				-- Function to handle lobby (auto join)
 				local function handleLobby()
 					if game.PlaceId ~= 3823781113 then return end
 					
 					pcall(function()
 						local ReplicatedStorage = game:GetService("ReplicatedStorage")
-						local Players = game:GetService("Players")
-						local LocalPlayer = Players.LocalPlayer
-						
 						local DungeonInfo = require(ReplicatedStorage.Modules.DungeonInfo)
 						local DungeonGroupModule = require(ReplicatedStorage.Modules.DungeonGroupModule)
 						local ClientDataManager = require(LocalPlayer.PlayerScripts.MainClient.ClientDataManager)
@@ -1232,52 +1310,9 @@ run(function()
 					end)
 				end
 				
-				-- Function to handle dungeon (auto farm)
+				-- Function to handle dungeon farming
 				local function handleDungeon()
-					local Players = game:GetService("Players")
-					local RunService = game:GetService("RunService")
-					local LocalPlayer = Players.LocalPlayer
 					local lastFireTime = 0
-					
-					local function getCharacterParts()
-						local char = LocalPlayer.Character
-						if not char then return nil, nil, nil end
-						return char:FindFirstChild("HumanoidRootPart"), 
-							   char:FindFirstChild("Humanoid"), 
-							   char:FindFirstChildOfClass("Animator")
-					end
-					
-					local function safeEnlargeHitbox(part)
-						if not part or not part:IsA("BasePart") then return end
-						if part:GetAttribute("AutoFarmScaled") then return end
-						pcall(function()
-							part.Size = part.Size * 3
-							part:SetAttribute("AutoFarmScaled", true)
-						end)
-					end
-					
-					local function getBotsByColor(important, colorName)
-						local bots = {}
-						for _, child in ipairs(important:GetChildren()) do
-							local bot = child:FindFirstChild(colorName .. " Bot")
-							if bot and bot:FindFirstChild("HumanoidRootPart") then
-								table.insert(bots, bot.HumanoidRootPart)
-								safeEnlargeHitbox(bot.HumanoidRootPart)
-							end
-						end
-						return bots
-					end
-					
-					local function getBossHRP(important, spawnerName, bossName)
-						local spawner = important:FindFirstChild(spawnerName)
-						if spawner then
-							local boss = spawner:FindFirstChild(bossName)
-							if boss and boss:FindFirstChild("HumanoidRootPart") then
-								return boss.HumanoidRootPart
-							end
-						end
-						return nil
-					end
 					
 					-- Heartbeat farming
 					FullyAutoDungeon:Clean(RunService.Heartbeat:Connect(function(deltaTime)
@@ -1288,50 +1323,36 @@ run(function()
 						
 						if animator then
 							pcall(function()
-								for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+								for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
 									track:Stop(0)
 								end
 							end)
 						end
 						
-						local dungeon = workspace:FindFirstChild("Dungeon")
-						if not dungeon then return end
-						local important = dungeon:FindFirstChild("Important")
-						if not important then return end
+						-- Refresh target
+						if not currentTarget or not currentTarget.Parent then
+							currentTarget = getNextAliveBot()
+						end
 						
-						local greenBots  = getBotsByColor(important, "Green")
-						local blueBots   = getBotsByColor(important, "Blue")
-						local redBots    = getBotsByColor(important, "Red")
-						local purpleBots = getBotsByColor(important, "Purple")
-						
-						local greenBossHRP  = getBossHRP(important, "GreenBossEnemySpawner", "Green Boss")
-						local blueBossHRP   = getBossHRP(important, "BlueBossEnemySpawner",  "Blue Boss")
-						local redBossHRP    = getBossHRP(important, "RedBossEnemySpawner",   "Red Boss")
-						local purpleBossHRP = getBossHRP(important, "PurpleBossEnemySpawner","Purple Boss")
-						
-						local targetHRP = greenBossHRP or blueBossHRP or redBossHRP or purpleBossHRP
-							or greenBots[1] or blueBots[1] or redBots[1] or purpleBots[1]
-						
-						if targetHRP then
+						if currentTarget then
 							pcall(function()
+								local targetPos = currentTarget.Position
+								local height = isBoss(currentTarget) and FloatHeightBoss.Value or FloatHeightBot.Value
+								local abovePos = targetPos + Vector3.new(0, height, 0)
 								hrp.AssemblyLinearVelocity = Vector3.zero
 								hrp.Velocity = Vector3.zero
+								-- Look straight down at target
+								hrp.CFrame = CFrame.new(abovePos) * CFrame.Angles(-math.pi/2, 0, 0)
 							end)
-							
-							local floatHeight = (greenBossHRP or blueBossHRP or redBossHRP or purpleBossHRP) 
-								and FloatHeightBoss.Value or FloatHeightBot.Value
-							local targetPos = targetHRP.Position + Vector3.new(0, floatHeight, 0)
-							local lookCFrame = CFrame.new(targetPos, targetHRP.Position)
-							pcall(function() hrp.CFrame = lookCFrame end)
 						end
 						
 						lastFireTime = lastFireTime + deltaTime
 						if lastFireTime >= 0.1 then
 							lastFireTime = 0
 							pcall(function()
-								local userFolder = workspace:FindFirstChild(LocalPlayer.Name)
-								if userFolder then
-									for _, tool in ipairs(userFolder:GetChildren()) do
+								local char = LocalPlayer.Character
+								if char then
+									for _, tool in ipairs(char:GetChildren()) do
 										if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
 											tool.RemoteClick:FireServer({})
 										end
@@ -1347,30 +1368,44 @@ run(function()
 					end))
 					
 					-- Auto-collect items
-					farmLoop = task.spawn(function()
+					promptLoop = task.spawn(function()
 						while isRunning and FullyAutoDungeon.Enabled do
 							task.wait(1)
-							local dungeon = workspace:FindFirstChild("Dungeon")
+							local dungeon = getActiveDungeon()
 							if dungeon then
-								for _, name in ipairs({"Shiny", "Gold", "Rainbow", "Void"}) do
-									local folder = dungeon:FindFirstChild(name)
-									if folder then
-										local prompt = folder:FindFirstChild("ProximityPrompt")
-										if prompt and prompt:IsA("ProximityPrompt") then
+								for _, promptName in ipairs(PROMPT_NAMES) do
+									local promptParent = dungeon:FindFirstChild(promptName)
+									if promptParent then
+										local proximityPrompt = promptParent:FindFirstChild("ProximityPrompt")
+										if proximityPrompt and proximityPrompt:IsA("ProximityPrompt") then
 											pcall(function()
-												prompt.MaxActivationDistance = 100000
-												prompt.HoldDuration = 0
-												prompt.RequiresLineOfSight = false
-												if fireproximityprompt then
-													fireproximityprompt(prompt)
-												elseif firesignal then
-													firesignal(prompt.Triggered, Players.LocalPlayer)
-												else
-													prompt:InputHoldBegin()
-													task.wait(0.05)
-													prompt:InputHoldEnd()
-												end
+												fireproximityprompt(proximityPrompt)
 											end)
+										end
+									end
+								end
+							end
+						end
+					end)
+					
+					-- Auto teleport to prompts when no mobs
+					teleportLoop = task.spawn(function()
+						while isRunning and FullyAutoDungeon.Enabled do
+							task.wait(1)
+							local dungeon = getActiveDungeon()
+							if dungeon then
+								local aliveBot = getNextAliveBot()
+								if not aliveBot then
+									local hrp = getCharacterParts()
+									if hrp then
+										for _, promptName in ipairs(PROMPT_NAMES) do
+											local promptParent = dungeon:FindFirstChild(promptName)
+											if promptParent then
+												pcall(function()
+													hrp.CFrame = promptParent:GetPivot() + Vector3.new(0, 5, 0)
+												end)
+												break
+											end
 										end
 									end
 								end
@@ -1379,28 +1414,19 @@ run(function()
 					end)
 				end
 				
-				-- Initial check
+				-- Initial check and setup
 				if game.PlaceId == 3823781113 then
 					handleLobby()
 				else
 					handleDungeon()
 				end
 				
-				-- Monitor for place changes
-				FullyAutoDungeon:Clean(game:GetPropertyChangedSignal("PlaceId"):Connect(function()
-					if game.PlaceId == 3823781113 then
-						if farmLoop then task.cancel(farmLoop) end
-						handleLobby()
-					else
-						if joinLoop then task.cancel(joinLoop) end
-						handleDungeon()
-					end
-				end))
-				
 			else
 				isRunning = false
+				currentTarget = nil
 				if joinLoop then task.cancel(joinLoop) end
-				if farmLoop then task.cancel(farmLoop) end
+				if promptLoop then task.cancel(promptLoop) end
+				if teleportLoop then task.cancel(teleportLoop) end
 				notif('Fully Auto', 'Stopped', 2)
 			end
 		end,
