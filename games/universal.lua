@@ -7,7 +7,7 @@ local loadstring = function(...)
 end
 local isfile = isfile or function(file)
 	local suc, res = pcall(function()
-		return readfile(file)
+		return areadfile(file)
 	end)
 	return suc and res ~= nil and res ~= ''
 end
@@ -860,7 +860,14 @@ run(function()
 	})
 end)
 
+-- Ensure AutoFarm category exists
+vape.Categories.AutoFarm = vape.Categories.AutoFarm or vape:CreateCategory("AutoFarm", {
+	Icon = "rbxassetid://3926305904",
+})
+
 run(function()
+	repeat task.wait() until vape and vape.Loaded
+
 	local AutoDungeon = vape.Categories.AutoFarm:CreateModule({
 		Name = "Auto Dungeon",
 		Function = function(callback)
@@ -886,9 +893,11 @@ run(function()
 				local floatBot, floatBoss = 9, 17
 				local lastFire = 0
 				local currentTarget
-
 				local running = true
-				AutoDungeon:Clean(function() running = false end)
+
+				if AutoDungeon and AutoDungeon.Clean then
+					AutoDungeon:Clean(function() running = false end)
+				end
 
 				local function getCharacterParts()
 					local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -1004,46 +1013,48 @@ run(function()
 				end)
 
 				-- Main farm loop
-				AutoDungeon:Clean(RunService.Heartbeat:Connect(function(dt)
-					if not running then return end
-					local hrp, hum, animator = getCharacterParts()
-					if not hrp or not hum then return end
-					if animator then
-						for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-							track:Stop(0)
+				if AutoDungeon and AutoDungeon.Clean then
+					AutoDungeon:Clean(RunService.Heartbeat:Connect(function(dt)
+						if not running then return end
+						local hrp, hum, animator = getCharacterParts()
+						if not hrp or not hum then return end
+						if animator then
+							for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+								track:Stop(0)
+							end
 						end
-					end
-					if not currentTarget or not currentTarget.Parent then
-						currentTarget = getNextAliveBot()
-					end
-					if not currentTarget then return end
-					local targetPos = currentTarget.Position
-					local height = isBoss(currentTarget) and floatBoss or floatBot
-					local abovePos = targetPos + Vector3.new(0, height, 0)
-					pcall(function()
-						hrp.AssemblyLinearVelocity = Vector3.zero
-						hrp.Velocity = Vector3.zero
-						hrp.CFrame = CFrame.new(abovePos) * CFrame.Angles(-math.pi/2, 0, 0)
-					end)
-					lastFire += dt
-					if lastFire >= 0.1 then
-						lastFire = 0
+						if not currentTarget or not currentTarget.Parent then
+							currentTarget = getNextAliveBot()
+						end
+						if not currentTarget then return end
+						local targetPos = currentTarget.Position
+						local height = isBoss(currentTarget) and floatBoss or floatBot
+						local abovePos = targetPos + Vector3.new(0, height, 0)
 						pcall(function()
-							local char = LocalPlayer.Character
-							if char then
-								for _, tool in ipairs(char:GetChildren()) do
-									if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
-										tool.RemoteClick:FireServer({})
+							hrp.AssemblyLinearVelocity = Vector3.zero
+							hrp.Velocity = Vector3.zero
+							hrp.CFrame = CFrame.new(abovePos) * CFrame.Angles(-math.pi/2, 0, 0)
+						end)
+						lastFire += dt
+						if lastFire >= 0.1 then
+							lastFire = 0
+							pcall(function()
+								local char = LocalPlayer.Character
+								if char then
+									for _, tool in ipairs(char:GetChildren()) do
+										if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+											tool.RemoteClick:FireServer({})
+										end
+									end
+									local events = ReplicatedStorage:FindFirstChild("Events")
+									if events and events:FindFirstChild("SwingSaber") then
+										events.SwingSaber:FireServer()
 									end
 								end
-								local events = ReplicatedStorage:FindFirstChild("Events")
-								if events and events:FindFirstChild("SwingSaber") then
-									events.SwingSaber:FireServer()
-								end
-							end
-						end)
-					end
-				end))
+							end)
+						end
+					end))
+				end
 			end
 		end,
 		Tooltip = "Automatically creates and farms dungeon mobs"
@@ -1051,6 +1062,8 @@ run(function()
 end)
 
 run(function()
+	repeat task.wait() until vape and vape.Loaded
+
 	local AutoSwing = vape.Categories.AutoFarm:CreateModule({
 		Name = "Auto Swing",
 		Function = function(callback)
@@ -1060,26 +1073,31 @@ run(function()
 				local Players = game:GetService("Players")
 				local LocalPlayer = Players.LocalPlayer
 				local running = true
-				AutoSwing:Clean(function() running = false end)
 
-				AutoSwing:Clean(RunService.Heartbeat:Connect(function()
-					if not running then return end
-					local char = LocalPlayer.Character
-					if not char then return end
-					for _, tool in ipairs(char:GetChildren()) do
-						if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+				if AutoSwing and AutoSwing.Clean then
+					AutoSwing:Clean(function() running = false end)
+				end
+
+				if AutoSwing and AutoSwing.Clean then
+					AutoSwing:Clean(RunService.Heartbeat:Connect(function()
+						if not running then return end
+						local char = LocalPlayer.Character
+						if not char then return end
+						for _, tool in ipairs(char:GetChildren()) do
+							if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+								pcall(function()
+									tool.RemoteClick:FireServer({})
+								end)
+							end
+						end
+						local events = ReplicatedStorage:FindFirstChild("Events")
+						if events and events:FindFirstChild("SwingSaber") then
 							pcall(function()
-								tool.RemoteClick:FireServer({})
+								events.SwingSaber:FireServer()
 							end)
 						end
-					end
-					local events = ReplicatedStorage:FindFirstChild("Events")
-					if events and events:FindFirstChild("SwingSaber") then
-						pcall(function()
-							events.SwingSaber:FireServer()
-						end)
-					end
-				end))
+					end))
+				end
 			end
 		end,
 		Tooltip = "Automatically swings all equipped weapons"
