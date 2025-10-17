@@ -5763,7 +5763,7 @@ end))
 mainapi:CreateGUI()
 mainapi.Categories.Main:CreateDivider()
 mainapi:CreateCategory({
-	Name = 'Combat',
+	Name = 'AutoFarm',
 	Icon = getcustomasset('newvape/assets/new/combaticon.png'),
 	Size = UDim2.fromOffset(13, 14)
 })
@@ -6079,7 +6079,7 @@ guipane:CreateButton({
 	Function = function()
 		local priority = {
 			GUICategory = 1,
-			CombatCategory = 2,
+			AutoFarmCategory = 2,
 			PlayerCategory = 3,
 			RenderCategory = 4,
 			UtilityCategory = 5,
