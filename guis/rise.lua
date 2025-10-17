@@ -7,7 +7,7 @@ local mainapi = {
 	},
 	HeldKeybinds = {},
 	Keybind = {'RightShift'},
-	Loaded = false,
+	Loaded = true,
 	Legit = {Modules = {}},
 	Libraries = {},
 	Modules = {},
