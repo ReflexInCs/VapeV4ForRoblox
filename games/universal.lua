@@ -859,26 +859,22 @@ run(function()
 		Tooltip = 'Allows you to jump infinitely in the air'
 	})
 end)
-
--- Auto Dungeon Module
+-- Auto Join Dungeon Module (Lobby Only)
 run(function()
-	local AutoDungeon
+	local AutoJoinDungeon
 	local DifficultySlider
 	local AutoStartToggle
 	local dungeonLoop
 	local isRunning = false
 	
-	-- Check if we're in the lobby
-	local isInLobby = game.PlaceId == 3823781113
-	
-	AutoDungeon = vape.Categories.World:CreateModule({
-		Name = 'AutoDungeon',
+	AutoJoinDungeon = vape.Categories.AutoFarm:CreateModule({
+		Name = 'AutoJoinDungeon',
 		Function = function(callback)
 			if callback then
-				-- Only work in lobby
-				if not isInLobby then
-					notif('Auto Dungeon', 'This module only works in the lobby!', 5, 'warning')
-					AutoDungeon:Toggle()
+				-- Check if we're in the lobby
+				if game.PlaceId ~= 3823781113 then
+					notif('Auto Join', 'This module only works in the lobby (PlaceId: 3823781113)!', 5, 'warning')
+					AutoJoinDungeon:Toggle()
 					return
 				end
 				
@@ -900,9 +896,9 @@ run(function()
 					
 					-- Main dungeon loop
 					dungeonLoop = task.spawn(function()
-						notif('Auto Dungeon', 'Started! Difficulty: '..DifficultySlider.Value, 3)
+						notif('Auto Join', 'Started! Difficulty: '..DifficultySlider.Value, 3)
 						
-						while isRunning and AutoDungeon.Enabled do
+						while isRunning and AutoJoinDungeon.Enabled do
 							task.wait(5)
 							
 							if not DUNGEON then continue end
@@ -910,7 +906,6 @@ run(function()
 							-- Check cooldown
 							local cooldown = math.max(0, ClientDataManager.Data.DungeonCooldownEndDT - DateTimeManager:Now())
 							if cooldown > 0 then
-								-- Optionally notify about cooldown
 								continue
 							end
 							
@@ -930,7 +925,7 @@ run(function()
 								
 								if AutoStartToggle.Enabled then
 									UIAction:FireServer("DungeonGroupAction", "Start")
-									notif('Auto Dungeon', 'Starting dungeon...', 2)
+									notif('Auto Join', 'Starting dungeon...', 2)
 								end
 							end
 						end
@@ -938,8 +933,8 @@ run(function()
 				end)
 				
 				if not success then
-					notif('Auto Dungeon', 'Error: '..tostring(err), 5, 'error')
-					AutoDungeon:Toggle()
+					notif('Auto Join', 'Error: '..tostring(err), 5, 'error')
+					AutoJoinDungeon:Toggle()
 				end
 			else
 				-- Disable
@@ -948,36 +943,34 @@ run(function()
 					task.cancel(dungeonLoop)
 					dungeonLoop = nil
 				end
-				notif('Auto Dungeon', 'Stopped', 2)
+				notif('Auto Join', 'Stopped', 2)
 			end
 		end,
 		Tooltip = 'Automatically joins and starts dungeons in the lobby'
 	})
 	
-	DifficultySlider = AutoDungeon:CreateSlider({
+	DifficultySlider = AutoJoinDungeon:CreateSlider({
 		Name = 'Difficulty',
 		Min = 1,
 		Max = 4,
 		Default = 4,
 		Function = function(val)
-			if AutoDungeon.Enabled then
-				notif('Auto Dungeon', 'Difficulty set to: '..val, 2)
+			if AutoJoinDungeon.Enabled then
+				notif('Auto Join', 'Difficulty set to: '..val, 2)
 			end
 		end,
 		Tooltip = 'Select dungeon difficulty (1-4)'
 	})
 	
-	AutoStartToggle = AutoDungeon:CreateToggle({
+	AutoStartToggle = AutoJoinDungeon:CreateToggle({
 		Name = 'Auto Start',
 		Default = true,
-		Function = function(callback)
-			-- Optional: Add functionality when toggled
-		end,
+		Function = function(callback) end,
 		Tooltip = 'Automatically start the dungeon when ready'
 	})
 end)
 
--- Auto Farm Dungeon Module (for inside dungeons)
+-- Auto Farm Dungeon Module (Inside Dungeons Only)
 run(function()
 	local AutoFarmDungeon
 	local FloatHeightBot
@@ -985,29 +978,21 @@ run(function()
 	local farmLoop
 	local isRunning = false
 	
-	-- Check if we're in a dungeon
-	local isInDungeon = game.PlaceId == 71460947057345
-	
-	AutoFarmDungeon = vape.Categories.World:CreateModule({
+	AutoFarmDungeon = vape.Categories.AutoFarm:CreateModule({
 		Name = 'AutoFarmDungeon',
 		Function = function(callback)
 			if callback then
-				-- Only work in dungeon
-				if not isInDungeon then
-					notif('Auto Farm', 'This module only works inside dungeons!', 5, 'warning')
-					AutoFarmDungeon:Toggle()
-					return
-				end
-				
 				isRunning = true
 				
 				local Players = game:GetService("Players")
+				local RunService = game:GetService("RunService")
 				local LocalPlayer = Players.LocalPlayer
 				local lastFireTime = 0
 				
 				-- Helper functions
 				local function getCharacterParts()
-					local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+					local char = LocalPlayer.Character
+					if not char then return nil, nil, nil end
 					return char:FindFirstChild("HumanoidRootPart"), 
 						   char:FindFirstChild("Humanoid"), 
 						   char:FindFirstChildOfClass("Animator")
@@ -1016,8 +1001,10 @@ run(function()
 				local function safeEnlargeHitbox(part)
 					if not part or not part:IsA("BasePart") then return end
 					if part:GetAttribute("AutoFarmScaled") then return end
-					part.Size = part.Size * 3
-					part:SetAttribute("AutoFarmScaled", true)
+					pcall(function()
+						part.Size = part.Size * 3
+						part:SetAttribute("AutoFarmScaled", true)
+					end)
 				end
 				
 				local function getBotsByColor(important, colorName)
@@ -1044,7 +1031,7 @@ run(function()
 				end
 				
 				-- Farming loop
-				AutoFarmDungeon:Clean(runService.Heartbeat:Connect(function(deltaTime)
+				AutoFarmDungeon:Clean(RunService.Heartbeat:Connect(function(deltaTime)
 					if not isRunning or not AutoFarmDungeon.Enabled then return end
 					
 					local hrp, humanoid, animator = getCharacterParts()
@@ -1052,9 +1039,11 @@ run(function()
 					
 					-- Stop animations
 					if animator then
-						for _, track in pairs(animator:GetPlayingAnimationTracks()) do
-							track:Stop(0)
-						end
+						pcall(function()
+							for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+								track:Stop(0)
+							end
+						end)
 					end
 					
 					local dungeon = workspace:FindFirstChild("Dungeon")
@@ -1155,7 +1144,7 @@ run(function()
 				notif('Auto Farm', 'Stopped', 2)
 			end
 		end,
-		Tooltip = 'Automatically farms dungeons when inside one'
+		Tooltip = 'Automatically farms dungeons and collects items'
 	})
 	
 	FloatHeightBot = AutoFarmDungeon:CreateSlider({
@@ -1174,5 +1163,281 @@ run(function()
 		Default = 17,
 		Function = function(val) end,
 		Tooltip = 'Float height above boss enemies'
+	})
+end)
+
+-- Fully Auto Dungeon (Combined: Join + Farm)
+run(function()
+	local FullyAutoDungeon
+	local DifficultySlider
+	local FloatHeightBot
+	local FloatHeightBoss
+	local AutoStartToggle
+	
+	local joinLoop, farmLoop
+	local isRunning = false
+	local lastPlaceId = game.PlaceId
+	
+	FullyAutoDungeon = vape.Categories.AutoFarm:CreateModule({
+		Name = 'FullyAutoDungeon',
+		Function = function(callback)
+			if callback then
+				isRunning = true
+				notif('Fully Auto', 'Started! Will auto-join and auto-farm', 3)
+				
+				-- Function to handle lobby (auto join)
+				local function handleLobby()
+					if game.PlaceId ~= 3823781113 then return end
+					
+					pcall(function()
+						local ReplicatedStorage = game:GetService("ReplicatedStorage")
+						local Players = game:GetService("Players")
+						local LocalPlayer = Players.LocalPlayer
+						
+						local DungeonInfo = require(ReplicatedStorage.Modules.DungeonInfo)
+						local DungeonGroupModule = require(ReplicatedStorage.Modules.DungeonGroupModule)
+						local ClientDataManager = require(LocalPlayer.PlayerScripts.MainClient.ClientDataManager)
+						local DateTimeManager = require(LocalPlayer.PlayerScripts.MainClient.DateTimeManager)
+						local UIAction = ReplicatedStorage.Events.UIAction
+						
+						local DUNGEON = next(DungeonInfo.Dungeons)
+						
+						joinLoop = task.spawn(function()
+							while isRunning and FullyAutoDungeon.Enabled and game.PlaceId == 3823781113 do
+								task.wait(5)
+								
+								if not DUNGEON then continue end
+								
+								local cooldown = math.max(0, ClientDataManager.Data.DungeonCooldownEndDT - DateTimeManager:Now())
+								if cooldown > 0 then continue end
+								
+								local group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
+								
+								if not group then
+									UIAction:FireServer("DungeonGroupAction", "Create", "Public", DUNGEON, DifficultySlider.Value)
+									task.wait(1)
+									group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
+								end
+								
+								if group and DungeonGroupModule.CheckIsOwner(LocalPlayer, group) then
+									UIAction:FireServer("DungeonGroupAction", "SwitchDungeonType", DUNGEON, DifficultySlider.Value)
+									task.wait(1)
+									
+									if AutoStartToggle.Enabled then
+										UIAction:FireServer("DungeonGroupAction", "Start")
+									end
+								end
+							end
+						end)
+					end)
+				end
+				
+				-- Function to handle dungeon (auto farm)
+				local function handleDungeon()
+					local Players = game:GetService("Players")
+					local RunService = game:GetService("RunService")
+					local LocalPlayer = Players.LocalPlayer
+					local lastFireTime = 0
+					
+					local function getCharacterParts()
+						local char = LocalPlayer.Character
+						if not char then return nil, nil, nil end
+						return char:FindFirstChild("HumanoidRootPart"), 
+							   char:FindFirstChild("Humanoid"), 
+							   char:FindFirstChildOfClass("Animator")
+					end
+					
+					local function safeEnlargeHitbox(part)
+						if not part or not part:IsA("BasePart") then return end
+						if part:GetAttribute("AutoFarmScaled") then return end
+						pcall(function()
+							part.Size = part.Size * 3
+							part:SetAttribute("AutoFarmScaled", true)
+						end)
+					end
+					
+					local function getBotsByColor(important, colorName)
+						local bots = {}
+						for _, child in ipairs(important:GetChildren()) do
+							local bot = child:FindFirstChild(colorName .. " Bot")
+							if bot and bot:FindFirstChild("HumanoidRootPart") then
+								table.insert(bots, bot.HumanoidRootPart)
+								safeEnlargeHitbox(bot.HumanoidRootPart)
+							end
+						end
+						return bots
+					end
+					
+					local function getBossHRP(important, spawnerName, bossName)
+						local spawner = important:FindFirstChild(spawnerName)
+						if spawner then
+							local boss = spawner:FindFirstChild(bossName)
+							if boss and boss:FindFirstChild("HumanoidRootPart") then
+								return boss.HumanoidRootPart
+							end
+						end
+						return nil
+					end
+					
+					-- Heartbeat farming
+					FullyAutoDungeon:Clean(RunService.Heartbeat:Connect(function(deltaTime)
+						if not isRunning or not FullyAutoDungeon.Enabled then return end
+						
+						local hrp, humanoid, animator = getCharacterParts()
+						if not hrp or not humanoid then return end
+						
+						if animator then
+							pcall(function()
+								for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+									track:Stop(0)
+								end
+							end)
+						end
+						
+						local dungeon = workspace:FindFirstChild("Dungeon")
+						if not dungeon then return end
+						local important = dungeon:FindFirstChild("Important")
+						if not important then return end
+						
+						local greenBots  = getBotsByColor(important, "Green")
+						local blueBots   = getBotsByColor(important, "Blue")
+						local redBots    = getBotsByColor(important, "Red")
+						local purpleBots = getBotsByColor(important, "Purple")
+						
+						local greenBossHRP  = getBossHRP(important, "GreenBossEnemySpawner", "Green Boss")
+						local blueBossHRP   = getBossHRP(important, "BlueBossEnemySpawner",  "Blue Boss")
+						local redBossHRP    = getBossHRP(important, "RedBossEnemySpawner",   "Red Boss")
+						local purpleBossHRP = getBossHRP(important, "PurpleBossEnemySpawner","Purple Boss")
+						
+						local targetHRP = greenBossHRP or blueBossHRP or redBossHRP or purpleBossHRP
+							or greenBots[1] or blueBots[1] or redBots[1] or purpleBots[1]
+						
+						if targetHRP then
+							pcall(function()
+								hrp.AssemblyLinearVelocity = Vector3.zero
+								hrp.Velocity = Vector3.zero
+							end)
+							
+							local floatHeight = (greenBossHRP or blueBossHRP or redBossHRP or purpleBossHRP) 
+								and FloatHeightBoss.Value or FloatHeightBot.Value
+							local targetPos = targetHRP.Position + Vector3.new(0, floatHeight, 0)
+							local lookCFrame = CFrame.new(targetPos, targetHRP.Position)
+							pcall(function() hrp.CFrame = lookCFrame end)
+						end
+						
+						lastFireTime = lastFireTime + deltaTime
+						if lastFireTime >= 0.1 then
+							lastFireTime = 0
+							pcall(function()
+								local userFolder = workspace:FindFirstChild(LocalPlayer.Name)
+								if userFolder then
+									for _, tool in ipairs(userFolder:GetChildren()) do
+										if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+											tool.RemoteClick:FireServer({})
+										end
+									end
+								end
+								local ReplicatedStorage = game:GetService("ReplicatedStorage")
+								if ReplicatedStorage:FindFirstChild("Events") and 
+								   ReplicatedStorage.Events:FindFirstChild("SwingSaber") then
+									ReplicatedStorage.Events.SwingSaber:FireServer()
+								end
+							end)
+						end
+					end))
+					
+					-- Auto-collect items
+					farmLoop = task.spawn(function()
+						while isRunning and FullyAutoDungeon.Enabled do
+							task.wait(1)
+							local dungeon = workspace:FindFirstChild("Dungeon")
+							if dungeon then
+								for _, name in ipairs({"Shiny", "Gold", "Rainbow", "Void"}) do
+									local folder = dungeon:FindFirstChild(name)
+									if folder then
+										local prompt = folder:FindFirstChild("ProximityPrompt")
+										if prompt and prompt:IsA("ProximityPrompt") then
+											pcall(function()
+												prompt.MaxActivationDistance = 100000
+												prompt.HoldDuration = 0
+												prompt.RequiresLineOfSight = false
+												if fireproximityprompt then
+													fireproximityprompt(prompt)
+												elseif firesignal then
+													firesignal(prompt.Triggered, Players.LocalPlayer)
+												else
+													prompt:InputHoldBegin()
+													task.wait(0.05)
+													prompt:InputHoldEnd()
+												end
+											end)
+										end
+									end
+								end
+							end
+						end
+					end)
+				end
+				
+				-- Initial check
+				if game.PlaceId == 3823781113 then
+					handleLobby()
+				else
+					handleDungeon()
+				end
+				
+				-- Monitor for place changes
+				FullyAutoDungeon:Clean(game:GetPropertyChangedSignal("PlaceId"):Connect(function()
+					if game.PlaceId == 3823781113 then
+						if farmLoop then task.cancel(farmLoop) end
+						handleLobby()
+					else
+						if joinLoop then task.cancel(joinLoop) end
+						handleDungeon()
+					end
+				end))
+				
+			else
+				isRunning = false
+				if joinLoop then task.cancel(joinLoop) end
+				if farmLoop then task.cancel(farmLoop) end
+				notif('Fully Auto', 'Stopped', 2)
+			end
+		end,
+		Tooltip = 'Fully automatic: Joins dungeons in lobby, farms when inside'
+	})
+	
+	DifficultySlider = FullyAutoDungeon:CreateSlider({
+		Name = 'Difficulty',
+		Min = 1,
+		Max = 4,
+		Default = 4,
+		Function = function(val) end,
+		Tooltip = 'Dungeon difficulty (1-4)'
+	})
+	
+	FloatHeightBot = FullyAutoDungeon:CreateSlider({
+		Name = 'Bot Height',
+		Min = 5,
+		Max = 20,
+		Default = 9,
+		Function = function(val) end,
+		Tooltip = 'Float height above regular bots'
+	})
+	
+	FloatHeightBoss = FullyAutoDungeon:CreateSlider({
+		Name = 'Boss Height',
+		Min = 10,
+		Max = 30,
+		Default = 17,
+		Function = function(val) end,
+		Tooltip = 'Float height above boss enemies'
+	})
+	
+	AutoStartToggle = FullyAutoDungeon:CreateToggle({
+		Name = 'Auto Start',
+		Default = true,
+		Function = function(callback) end,
+		Tooltip = 'Auto start dungeons in lobby'
 	})
 end)
