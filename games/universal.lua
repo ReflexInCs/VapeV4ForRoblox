@@ -859,3 +859,320 @@ run(function()
 		Tooltip = 'Allows you to jump infinitely in the air'
 	})
 end)
+
+-- Auto Dungeon Module
+run(function()
+	local AutoDungeon
+	local DifficultySlider
+	local AutoStartToggle
+	local dungeonLoop
+	local isRunning = false
+	
+	-- Check if we're in the lobby
+	local isInLobby = game.PlaceId == 3823781113
+	
+	AutoDungeon = vape.Categories.World:CreateModule({
+		Name = 'AutoDungeon',
+		Function = function(callback)
+			if callback then
+				-- Only work in lobby
+				if not isInLobby then
+					notif('Auto Dungeon', 'This module only works in the lobby!', 5, 'warning')
+					AutoDungeon:Toggle()
+					return
+				end
+				
+				isRunning = true
+				
+				-- Get required modules
+				local success, err = pcall(function()
+					local ReplicatedStorage = game:GetService("ReplicatedStorage")
+					local Players = game:GetService("Players")
+					local LocalPlayer = Players.LocalPlayer
+					
+					local DungeonInfo = require(ReplicatedStorage.Modules.DungeonInfo)
+					local DungeonGroupModule = require(ReplicatedStorage.Modules.DungeonGroupModule)
+					local ClientDataManager = require(LocalPlayer.PlayerScripts.MainClient.ClientDataManager)
+					local DateTimeManager = require(LocalPlayer.PlayerScripts.MainClient.DateTimeManager)
+					local UIAction = ReplicatedStorage.Events.UIAction
+					
+					local DUNGEON = next(DungeonInfo.Dungeons)
+					
+					-- Main dungeon loop
+					dungeonLoop = task.spawn(function()
+						notif('Auto Dungeon', 'Started! Difficulty: '..DifficultySlider.Value, 3)
+						
+						while isRunning and AutoDungeon.Enabled do
+							task.wait(5)
+							
+							if not DUNGEON then continue end
+							
+							-- Check cooldown
+							local cooldown = math.max(0, ClientDataManager.Data.DungeonCooldownEndDT - DateTimeManager:Now())
+							if cooldown > 0 then
+								-- Optionally notify about cooldown
+								continue
+							end
+							
+							local group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
+							
+							-- Create group if doesn't exist
+							if not group then
+								UIAction:FireServer("DungeonGroupAction", "Create", "Public", DUNGEON, DifficultySlider.Value)
+								task.wait(1)
+								group = DungeonGroupModule.GetPlayersGroup(LocalPlayer)
+							end
+							
+							-- Start dungeon if we're the owner
+							if group and DungeonGroupModule.CheckIsOwner(LocalPlayer, group) then
+								UIAction:FireServer("DungeonGroupAction", "SwitchDungeonType", DUNGEON, DifficultySlider.Value)
+								task.wait(1)
+								
+								if AutoStartToggle.Enabled then
+									UIAction:FireServer("DungeonGroupAction", "Start")
+									notif('Auto Dungeon', 'Starting dungeon...', 2)
+								end
+							end
+						end
+					end)
+				end)
+				
+				if not success then
+					notif('Auto Dungeon', 'Error: '..tostring(err), 5, 'error')
+					AutoDungeon:Toggle()
+				end
+			else
+				-- Disable
+				isRunning = false
+				if dungeonLoop then
+					task.cancel(dungeonLoop)
+					dungeonLoop = nil
+				end
+				notif('Auto Dungeon', 'Stopped', 2)
+			end
+		end,
+		Tooltip = 'Automatically joins and starts dungeons in the lobby'
+	})
+	
+	DifficultySlider = AutoDungeon:CreateSlider({
+		Name = 'Difficulty',
+		Min = 1,
+		Max = 4,
+		Default = 4,
+		Function = function(val)
+			if AutoDungeon.Enabled then
+				notif('Auto Dungeon', 'Difficulty set to: '..val, 2)
+			end
+		end,
+		Tooltip = 'Select dungeon difficulty (1-4)'
+	})
+	
+	AutoStartToggle = AutoDungeon:CreateToggle({
+		Name = 'Auto Start',
+		Default = true,
+		Function = function(callback)
+			-- Optional: Add functionality when toggled
+		end,
+		Tooltip = 'Automatically start the dungeon when ready'
+	})
+end)
+
+-- Auto Farm Dungeon Module (for inside dungeons)
+run(function()
+	local AutoFarmDungeon
+	local FloatHeightBot
+	local FloatHeightBoss
+	local farmLoop
+	local isRunning = false
+	
+	-- Check if we're in a dungeon
+	local isInDungeon = game.PlaceId == 71460947057345
+	
+	AutoFarmDungeon = vape.Categories.World:CreateModule({
+		Name = 'AutoFarmDungeon',
+		Function = function(callback)
+			if callback then
+				-- Only work in dungeon
+				if not isInDungeon then
+					notif('Auto Farm', 'This module only works inside dungeons!', 5, 'warning')
+					AutoFarmDungeon:Toggle()
+					return
+				end
+				
+				isRunning = true
+				
+				local Players = game:GetService("Players")
+				local LocalPlayer = Players.LocalPlayer
+				local lastFireTime = 0
+				
+				-- Helper functions
+				local function getCharacterParts()
+					local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+					return char:FindFirstChild("HumanoidRootPart"), 
+						   char:FindFirstChild("Humanoid"), 
+						   char:FindFirstChildOfClass("Animator")
+				end
+				
+				local function safeEnlargeHitbox(part)
+					if not part or not part:IsA("BasePart") then return end
+					if part:GetAttribute("AutoFarmScaled") then return end
+					part.Size = part.Size * 3
+					part:SetAttribute("AutoFarmScaled", true)
+				end
+				
+				local function getBotsByColor(important, colorName)
+					local bots = {}
+					for _, child in ipairs(important:GetChildren()) do
+						local bot = child:FindFirstChild(colorName .. " Bot")
+						if bot and bot:FindFirstChild("HumanoidRootPart") then
+							table.insert(bots, bot.HumanoidRootPart)
+							safeEnlargeHitbox(bot.HumanoidRootPart)
+						end
+					end
+					return bots
+				end
+				
+				local function getBossHRP(important, spawnerName, bossName)
+					local spawner = important:FindFirstChild(spawnerName)
+					if spawner then
+						local boss = spawner:FindFirstChild(bossName)
+						if boss and boss:FindFirstChild("HumanoidRootPart") then
+							return boss.HumanoidRootPart
+						end
+					end
+					return nil
+				end
+				
+				-- Farming loop
+				AutoFarmDungeon:Clean(runService.Heartbeat:Connect(function(deltaTime)
+					if not isRunning or not AutoFarmDungeon.Enabled then return end
+					
+					local hrp, humanoid, animator = getCharacterParts()
+					if not hrp or not humanoid then return end
+					
+					-- Stop animations
+					if animator then
+						for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+							track:Stop(0)
+						end
+					end
+					
+					local dungeon = workspace:FindFirstChild("Dungeon")
+					if not dungeon then return end
+					local important = dungeon:FindFirstChild("Important")
+					if not important then return end
+					
+					-- Get all bots and bosses
+					local greenBots  = getBotsByColor(important, "Green")
+					local blueBots   = getBotsByColor(important, "Blue")
+					local redBots    = getBotsByColor(important, "Red")
+					local purpleBots = getBotsByColor(important, "Purple")
+					
+					local greenBossHRP  = getBossHRP(important, "GreenBossEnemySpawner", "Green Boss")
+					local blueBossHRP   = getBossHRP(important, "BlueBossEnemySpawner",  "Blue Boss")
+					local redBossHRP    = getBossHRP(important, "RedBossEnemySpawner",   "Red Boss")
+					local purpleBossHRP = getBossHRP(important, "PurpleBossEnemySpawner","Purple Boss")
+					
+					-- Priority: Bosses first, then bots
+					local targetHRP = greenBossHRP or blueBossHRP or redBossHRP or purpleBossHRP
+						or greenBots[1] or blueBots[1] or redBots[1] or purpleBots[1]
+					
+					if targetHRP then
+						pcall(function()
+							hrp.AssemblyLinearVelocity = Vector3.zero
+							hrp.Velocity = Vector3.zero
+						end)
+						
+						local floatHeight = (greenBossHRP or blueBossHRP or redBossHRP or purpleBossHRP) 
+							and FloatHeightBoss.Value or FloatHeightBot.Value
+						local targetPos = targetHRP.Position + Vector3.new(0, floatHeight, 0)
+						local lookCFrame = CFrame.new(targetPos, targetHRP.Position)
+						pcall(function() hrp.CFrame = lookCFrame end)
+					end
+					
+					-- Fire remotes
+					lastFireTime = lastFireTime + deltaTime
+					if lastFireTime >= 0.1 then
+						lastFireTime = 0
+						pcall(function()
+							local userFolder = workspace:FindFirstChild(LocalPlayer.Name)
+							if userFolder then
+								for _, tool in ipairs(userFolder:GetChildren()) do
+									if tool:IsA("Tool") and tool:FindFirstChild("RemoteClick") then
+										tool.RemoteClick:FireServer({})
+									end
+								end
+							end
+							local ReplicatedStorage = game:GetService("ReplicatedStorage")
+							if ReplicatedStorage:FindFirstChild("Events") and 
+							   ReplicatedStorage.Events:FindFirstChild("SwingSaber") then
+								ReplicatedStorage.Events.SwingSaber:FireServer()
+							end
+						end)
+					end
+				end))
+				
+				-- ProximityPrompt auto-collect
+				farmLoop = task.spawn(function()
+					while isRunning and AutoFarmDungeon.Enabled do
+						task.wait(1)
+						local dungeon = workspace:FindFirstChild("Dungeon")
+						if dungeon then
+							for _, name in ipairs({"Shiny", "Gold", "Rainbow", "Void"}) do
+								local folder = dungeon:FindFirstChild(name)
+								if folder then
+									local prompt = folder:FindFirstChild("ProximityPrompt")
+									if prompt and prompt:IsA("ProximityPrompt") then
+										pcall(function()
+											prompt.MaxActivationDistance = 100000
+											prompt.HoldDuration = 0
+											prompt.RequiresLineOfSight = false
+											if fireproximityprompt then
+												fireproximityprompt(prompt)
+											elseif firesignal then
+												firesignal(prompt.Triggered, LocalPlayer)
+											else
+												prompt:InputHoldBegin()
+												task.wait(0.05)
+												prompt:InputHoldEnd()
+											end
+										end)
+									end
+								end
+							end
+						end
+					end
+				end)
+				
+				notif('Auto Farm', 'Started farming dungeon!', 3)
+			else
+				-- Disable
+				isRunning = false
+				if farmLoop then
+					task.cancel(farmLoop)
+					farmLoop = nil
+				end
+				notif('Auto Farm', 'Stopped', 2)
+			end
+		end,
+		Tooltip = 'Automatically farms dungeons when inside one'
+	})
+	
+	FloatHeightBot = AutoFarmDungeon:CreateSlider({
+		Name = 'Bot Height',
+		Min = 5,
+		Max = 20,
+		Default = 9,
+		Function = function(val) end,
+		Tooltip = 'Float height above regular bots'
+	})
+	
+	FloatHeightBoss = AutoFarmDungeon:CreateSlider({
+		Name = 'Boss Height',
+		Min = 10,
+		Max = 30,
+		Default = 17,
+		Function = function(val) end,
+		Tooltip = 'Float height above boss enemies'
+	})
+end)
