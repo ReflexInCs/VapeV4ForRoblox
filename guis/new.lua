@@ -5773,7 +5773,7 @@ mainapi:CreateCategory({
 	Size = UDim2.fromOffset(14, 14)
 })
 mainapi:CreateCategory({
-	Name = 'Render',
+	Name = 'Dungeon',
 	Icon = getcustomasset('newvape/assets/new/rendericon.png'),
 	Size = UDim2.fromOffset(15, 14)
 })
@@ -6081,7 +6081,7 @@ guipane:CreateButton({
 			GUICategory = 1,
 			AutoFarmCategory = 2,
 			PlayerCategory = 3,
-			RenderCategory = 4,
+			DungeonCategory = 4,
 			UtilityCategory = 5,
 			WorldCategory = 6,
 			InventoryCategory = 7,
