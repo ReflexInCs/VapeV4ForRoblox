@@ -314,7 +314,7 @@ local function downloadFile(path, func)
 	if not isfile(path) then
 		createDownloader(path)
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/ReflexInCs/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
 		end)
 		if not suc or res == '404: Not Found' then
 			error(res)
@@ -4193,7 +4193,7 @@ function mainapi:CreateOverlay(categorysettings)
 		if clickgui.Visible then
 			window.Size = UDim2.fromOffset(window.Size.X.Offset, 41)
 			window.BackgroundTransparency = 0
-			blur.Visible = true
+			blur.Visible = false
 			icon.Visible = true
 			title.Visible = true
 			pin.Visible = true
@@ -5778,7 +5778,7 @@ mainapi:CreateCategory({
 	Size = UDim2.fromOffset(15, 14)
 })
 mainapi:CreateCategory({
-	Name = 'Utility',
+	Name = 'Misc',
 	Icon = getcustomasset('newvape/assets/new/utilityicon.png'),
 	Size = UDim2.fromOffset(15, 14)
 })
@@ -5911,7 +5911,7 @@ general:CreateButton({
 		if shared.VapeDeveloper then
 			loadstring(readfile('newvape/loader.lua'), 'loader')()
 		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/loader.lua', true))()
+			loadstring(game:HttpGet('https://raw.githubusercontent.com/ReflexInCs/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/loader.lua', true))()
 		end
 	end,
 	Tooltip = 'This will set your profile to the default settings of Vape'
@@ -5930,7 +5930,7 @@ general:CreateButton({
 		if shared.VapeDeveloper then
 			loadstring(readfile('newvape/loader.lua'), 'loader')()
 		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/loader.lua', true))()
+			loadstring(game:HttpGet('https://raw.githubusercontent.com/ReflexInCs/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/loader.lua', true))()
 		end
 	end,
 	Tooltip = 'Reloads vape for debugging purposes'
@@ -6038,7 +6038,7 @@ guipane:CreateDropdown({
 			if shared.VapeDeveloper then
 				loadstring(readfile('newvape/loader.lua'), 'loader')()
 			else
-				loadstring(game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/loader.lua', true))()
+				loadstring(game:HttpGet('https://raw.githubusercontent.com/ReflexInCs/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/loader.lua', true))()
 			end
 		end
 	end,
@@ -6082,7 +6082,7 @@ guipane:CreateButton({
 			AutoFarmCategory = 2,
 			PlayerCategory = 3,
 			DungeonCategory = 4,
-			UtilityCategory = 5,
+			MiscCategory = 5,
 			WorldCategory = 6,
 			InventoryCategory = 7,
 			MinigamesCategory = 8,
