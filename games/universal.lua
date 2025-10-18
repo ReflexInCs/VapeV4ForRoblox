@@ -1828,7 +1828,7 @@ run(function()
 		end
 	end
 	
-	Invisible = vape.Categories.Blatant:CreateModule({
+	Invisible = vape.Categories.Player:CreateModule({
 		Name = 'Invisible',
 		Function = function(callback)
 			if callback then
