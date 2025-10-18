@@ -46,11 +46,12 @@ end
 
 entitylib.start()
 
--- Shoot Murderer Module
+-- Shoot Murderer Module with External Button
 run(function()
 	local ShootMurderer
 	local shootOffset = 2.8
 	local offsetToPingMult = 1
+	local shootBtn
 	
 	local function getHRP(plr)
 		return plr.Character and (plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("UpperTorso"))
@@ -118,27 +119,48 @@ run(function()
 		end
 	end
 	
+	local function createShootButton()
+		local coreGui = cloneref(game:GetService("CoreGui"))
+		local gui = Instance.new("ScreenGui", coreGui)
+		gui.Name = "MM2ShootButton"
+		gui.ResetOnSpawn = false
+		
+		shootBtn = Instance.new("TextButton")
+		shootBtn.Name = "ShootMurderer"
+		shootBtn.Size = UDim2.new(0, 160, 0, 40)
+		shootBtn.Position = UDim2.new(1, -170, 0, 60)
+		shootBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		shootBtn.TextColor3 = Color3.new(1, 1, 1)
+		shootBtn.Font = Enum.Font.GothamBold
+		shootBtn.TextScaled = true
+		shootBtn.Text = "Shoot Murderer"
+		shootBtn.Parent = gui
+		
+		local corner = Instance.new("UICorner", shootBtn)
+		
+		shootBtn.MouseButton1Click:Connect(function()
+			shootMurderer()
+		end)
+		
+		return gui
+	end
+	
 	ShootMurderer = vape.Categories.Misc:CreateModule({
 		Name = 'ShootMurderer',
 		Function = function(callback)
 			if callback then
-				-- Shoot immediately when toggled on
-				local success = shootMurderer()
+				local gui = createShootButton()
+				notif('Shoot Murderer', 'Button enabled! Click the button to shoot.', 3)
 				
-				if success then
-					-- Auto-disable after shooting
-					task.wait(0.5)
-					if ShootMurderer.Enabled then
-						ShootMurderer:Toggle()
+				ShootMurderer:Clean(function()
+					if gui then
+						gui:Destroy()
 					end
-				else
-					-- If failed, disable immediately
-					if ShootMurderer.Enabled then
-						ShootMurderer:Toggle()
-					end
-				end
+				end)
+			else
+				notif('Shoot Murderer', 'Button disabled.', 2)
 			end
 		end,
-		Tooltip = 'Automatically shoots the murderer when toggled (Sheriff/Hero only)'
+		Tooltip = 'Shows a button to shoot the murderer when clicked (Sheriff/Hero only)'
 	})
 end)
