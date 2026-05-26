@@ -1667,7 +1667,7 @@ run(function()
 	local farmLoop
 	local bossConnection
 
-	AutoFarmBoss = vape.Categories.Autofarm:CreateModule({
+	AutoFarmBoss = vape.Categories.AutoFarm:CreateModule({
 		Name = 'Auto Farm Boss',
 		Function = function(callback)
 			if callback then
