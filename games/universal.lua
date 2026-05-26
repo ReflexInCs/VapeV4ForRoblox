@@ -1661,7 +1661,62 @@ run(function()
 		Tooltip = 'Delay between purchases (seconds)'
 	})
 end)
+run(function()
+	local AutoFarmBoss
+	local farmLoop
+	local bossConnection
 
+	AutoFarmBoss = vape.Categories.Autofarm:CreateModule({
+		Name = 'Auto Farm Boss',
+		Function = function(callback)
+			if callback then
+				farmLoop = task.spawn(function()
+					while AutoFarmBoss.Enabled do
+						pcall(function()
+							local bossHolder = workspace:FindFirstChild('Gameplay')
+								and workspace.Gameplay:FindFirstChild('Boss')
+								and workspace.Gameplay.Boss:FindFirstChild('BossHolder')
+							
+							if bossHolder then
+								local boss = bossHolder:FindFirstChild('Boss')
+								if boss then
+									-- Supprimer le HumanoidRootPart du boss
+									local bossHRP = boss:FindFirstChild('HumanoidRootPart')
+									if bossHRP then
+										bossHRP:Destroy()
+									end
+
+									-- Bring boss (téléporter le modèle boss vers le joueur)
+									local primaryPart = boss.PrimaryPart or boss:FindFirstChildWhichIsA('BasePart')
+									if primaryPart then
+										if entitylib.isAlive then
+											primaryPart.CFrame = entitylib.character.RootPart.CFrame
+										end
+									end
+								end
+							end
+
+							-- Téléporter et maintenir le joueur en place
+							if entitylib.isAlive then
+								entitylib.character.RootPart.CFrame = CFrame.new(397, 186, 167)
+							end
+						end)
+						task.wait(0.1)
+					end
+				end)
+				notif('Auto Farm Boss', 'Started!', 2)
+			else
+				if farmLoop then
+					task.cancel(farmLoop)
+					farmLoop = nil
+				end
+				notif('Auto Farm Boss', 'Stopped', 2)
+			end
+		end,
+		Tooltip = 'Supprime le HRP du boss, bring le boss et te téléporte en place'
+	})
+end)
+																								
 run(function()
 	local SpinBot
 	local Mode
