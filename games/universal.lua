@@ -1661,6 +1661,7 @@ run(function()
 		Tooltip = 'Delay between purchases (seconds)'
 	})
 end)
+																							
 run(function()
 	local AutoFarmBoss
 	local farmLoop
